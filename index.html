@@ -1,0 +1,1021 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A blue convertible built from text characters, driving through falling snow beside a moonlit ocean.">
+<title>Letter Convertible</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a wide 16:9 stage like a landscape video, terminal status bar, typing source panel below. Single dark look by choice. */
+:root {
+  --bg: #03040a;
+  --panel: #080a12;
+  --fg: #d6dae6;
+  --dim: #6b7086;
+  --faint: #262a3a;
+  --accent: #5fb4ff;
+  --hl: rgba(140, 180, 255, 0.06);
+  --kw: #4f8dff;
+  --fn: #8fd0ff;
+  --num: #b9d6ff;
+  --str: #e8f1ff;
+  --com: #56607a;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--mono); overflow: hidden; }
+.app {
+  height: 100%; max-width: 1440px; margin: 0 auto;
+  display: flex; flex-direction: column; justify-content: center;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0;
+}
+.stage { position: relative; flex: none; width: 100%; aspect-ratio: 16 / 9; max-height: calc(100% - 200px); min-height: 0; cursor: pointer; }
+canvas { position: absolute; inset: 0; display: block; }
+.rec {
+  position: absolute; top: 12px; left: 0;
+  font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: 0.04em;
+}
+.rec::before { content: "\25CF"; margin-right: 8px; color: #eaf2ff; animation: blink 1.2s steps(2) infinite; }
+.hud {
+  position: absolute; left: 0; top: 34px;
+  font-size: 12px; line-height: 1.6; color: var(--dim); font-variant-numeric: tabular-nums;
+  display: grid;
+  text-shadow: 0 0 6px var(--bg), 0 0 2px var(--bg);
+}
+.hud .row { display: flex; gap: 18px; white-space: pre; }
+.hud .for { color: var(--fg); }
+.hud .heart { color: #8fd0ff; text-shadow: 0 0 6px rgba(143, 208, 255, 0.55); }
+.hud input {
+  font: inherit; color: var(--fg); background: transparent; border: 0; border-bottom: 1px dashed var(--faint);
+  padding: 0; width: 15ch; outline: none;
+}
+.hud input:focus-visible { border-bottom-color: var(--accent); }
+.bar {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  font-size: 12px; color: var(--dim); padding-block: 8px;
+  border-bottom: 1px solid var(--faint);
+}
+.bar .cmd { color: var(--fg); }
+.bar .right { display: flex; align-items: center; gap: 14px; font-variant-numeric: tabular-nums; }
+.bar button {
+  font: inherit; color: var(--fg); background: transparent; border: 1px solid var(--faint);
+  padding: 3px 10px; cursor: pointer; border-radius: 2px;
+}
+.bar button:hover { border-color: var(--accent); color: var(--accent); }
+.bar button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.code {
+  height: clamp(120px, 26vh, 250px); flex: none; overflow: hidden; position: relative;
+  font-size: clamp(11px, 3.1vw, 14px); line-height: 1.75; padding-block: 8px;
+  margin-left: calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+  margin-right: calc(-1 * max(16px, env(safe-area-inset-right, 0px)));
+  background: var(--panel);
+}
+.code ol { list-style: none; margin: 0; padding: 0; }
+.code li { display: flex; white-space: pre; padding-right: 16px; min-width: 0; }
+.code li.cur { background: var(--hl); }
+.code .ln { width: 3.6ch; flex: none; text-align: right; margin-right: 2ch; color: var(--faint); font-variant-numeric: tabular-nums; }
+.code li.cur .ln { color: var(--dim); }
+.code .tx { overflow: hidden; min-width: 0; }
+.code .k { color: var(--kw); } .code .f { color: var(--fn); } .code .n { color: var(--num); }
+.code .s { color: var(--str); } .code .c { color: var(--com); font-style: italic; }
+.code .cursor { display: inline-block; width: 0.62em; height: 1.1em; vertical-align: -0.2em; background: var(--accent); margin-left: 1px; }
+.code.done .cursor { animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (max-width: 640px) {
+  .hud { font-size: 9px; line-height: 1.35; top: 22px; }
+  .rec { font-size: 10px; top: 6px; }
+}
+@media (prefers-reduced-motion: reduce) { .rec::before, .code.done .cursor { animation: none; } }
+</style>
+<style>html, body { margin: 0; } :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: border-box; }</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage" id="stage" role="img" aria-label="An animated blue convertible sports car drawn in text characters, driving in place on a snowy road at night under the moon and stars while snow falls.">
+    <canvas id="cv"></canvas>
+    <div class="rec" id="clock">t 00.00s</div>
+    <div class="hud">
+      <div class="row"><span class="for">winter <span class="heart">&lt;3</span></span><span>· 2026</span></div>
+      <div class="row"><span id="hSpeed">speed 000 mph</span><span id="hSnow">snow 0.0 in/h</span></div>
+      <div class="row"><span id="hLetters">letters 0</span></div>
+    </div>
+  </div>
+  <div class="bar">
+    <span class="cmd">py art.py</span>
+    <span class="right"><span id="fps">running · 30 fps</span><button id="replay" type="button">Replay</button></span>
+  </div>
+  <div class="code" id="code"><ol id="lines"></ol></div>
+</div>
+
+<script type="text/plain" id="src"># art.py: a convertible, driving nowhere in the snow
+import numpy as np
+from term import Canvas
+
+W, H = 200, 110
+YAW, PITCH, SCALE, ROW0 = -0.32, 0.26, 20, 40
+UPHILL = 0.105
+ROAD_SLOPE = 0.085
+TAU = 2 * np.pi
+DRAW = (0.3, 3.2)       # the outline sweeps in
+REV = (4.6, 7.2)        # the wheels spin up once it's built
+TOP = 112               # mph, going nowhere
+INK = ".,:;-~=+rtcvxzjf{}<>ou[]neaQ0$8B&#%"
+
+def smooth(a, b, t):
+    x = np.clip((t - a) / (b - a), 0, 1)
+    return x * x * (3 - 2 * x)
+
+# the body: a rounded superellipse swept nose to tail
+def profile(x):
+    hood = 0.84 - 0.34 * (np.clip(x - 0.95, 0, 1.17) / 1.17) ** 2
+    deck = 0.86 + 0.04 * np.exp(-((x + 1.3) / 0.4) ** 2) \
+        - 0.2 * (np.clip(-x - 1.5, 0, 0.62) / 0.62) ** 2
+    top = np.where(x > 0.95, hood, np.where(x < -0.8, deck, 0.80))
+    bot = 0.24 + 0.1 * (np.clip(abs(x) - 1.7, 0, 0.42) / 0.42) ** 2
+    w = 0.88 * np.sqrt(np.clip(1 - (x / 2.15) ** 6, 0, 1))
+    return top, bot, w + 0.04 * np.exp(-((x + 1.3) / 0.5) ** 2)
+
+def fenders(x):
+    return sum(np.exp(-((x - cx) / 0.35) ** 2) for cx in (-1.3, 1.28))
+
+def body(n=3.0):
+    x, th = np.meshgrid(np.arange(-2.12, 2.12, 0.02), np.linspace(0, TAU, 176))
+    top, bot, w = profile(x)
+    c, s = np.cos(th), np.sin(th)
+    z = w * np.sign(c) * abs(c) ** (2 / n)
+    y = (top + bot) / 2 + (top - bot) / 2 * np.sign(s) * abs(s) ** (2 / n)
+    y += 0.06 * fenders(x) * np.clip(s, 0, 1) * abs(c)
+    cockpit = (x > -0.8) & (x < 0.95) & (s > 0) & (abs(z) < w - 0.1)
+    arch = (abs(c) > 0.45) & (np.hypot(abs(x) - 1.28, y - 0.36) < 0.43)
+    return np.stack([x, y, z], -1)[~(cockpit | arch)]
+
+def windshield(n=40):
+    u, v = np.meshgrid(np.linspace(-1, 1, n), np.linspace(0, 1, n // 3))
+    pane = np.ones_like(u, bool)          # tinted glass in a chrome frame
+    p = np.stack([0.95 - 0.36 * v - 0.12 * u ** 2, 0.84 + 0.3 * v - 0.05 * u ** 2, 0.7 * u], -1)
+    return p[pane]
+
+# wheels: tread and rim, spokes turning with the road
+def wheel(cx, cz, spin, r=0.36, rim=0.25):
+    a, rr = np.meshgrid(np.linspace(0, TAU, 80), np.linspace(0, r, 40))
+    face = np.stack([cx + rr * np.cos(a), 0.36 + rr * np.sin(a), cz + 0 * a], -1)
+    spokes = np.cos(5 * (a + spin)) > 0.45   # rolls forward
+    return face, np.where(rr < rim, spokes, False)
+
+# the road slides back under the car; edges and dashes are exact
+# lines, one letter per column, picked by where the line sits in the cell
+LINE = "\u203e-_"
+
+def road_line(z, cols):
+    X = (np.arange(cols) - cols / 2) / SCALE
+    x = (X - z * np.sin(YAW)) / np.cos(YAW)
+    row = ROW0 + (-x * np.sin(YAW) + z * np.cos(YAW)) * np.sin(PITCH) * SCALE
+    return row.astype(int), np.array(list(LINE))[(row % 1 * 3).astype(int)], x
+
+# the horizon tilts with the road so the two stay parallel
+def horizon(cols):
+    return H * 0.53 + ROAD_SLOPE * (np.arange(cols) - cols / 2)
+
+# the sea: rows of swell between the horizon and the shore,
+# with the moon's reflection breaking up on the water
+def sea(t, c, r, depth):
+    w = np.sin(c * 0.33 * (1.6 - depth) + t * (0.6 + depth) + r * 1.7)
+    w += 0.5 * np.sin(c * 0.9 - t * 1.8 + r * 3.1)
+    return np.select([w > 1, w > 0.45, w > 0], ["~", "-", "."], " ")
+
+def moonpath(c, depth, moon_col, t):
+    half = (1.5 + 9 * depth) * (0.65 + 0.35 * np.sin(t * 2.6))
+    return abs(c - moon_col) < half
+
+# camera and moonlight
+def view(p, yaw=-0.32, pitch=0.26):
+    cy, sy = np.cos(yaw), np.sin(yaw)
+    cp, sp = np.cos(pitch), np.sin(pitch)
+    x = p[..., 0] * cy + p[..., 2] * sy
+    z = -p[..., 0] * sy + p[..., 2] * cy
+    y = p[..., 1] * cp - z * sp + UPHILL * x   # road climbs gently
+    return np.stack([x, y, p[..., 1] * sp + z * cp], axis=-1)
+
+# a crescent: the moon minus a slightly shifted moon
+def crescent(dx, dy):
+    inner = (dx - 0.5) ** 2 + dy ** 2
+    return (dx * dx + dy * dy <= 1) & (inner > 0.92 ** 2)
+
+MOON = np.array([-0.45, 0.8, 0.55])
+MOON /= np.linalg.norm(MOON)
+
+def moonlight(n):
+    return 0.18 + 0.82 * np.abs(n @ MOON)
+
+# snow in three layers; the near ones fall in front of the car
+FLAKES = np.random.default_rng(7).random((420, 4))
+
+def snow(t, speed):
+    depth = 1 + FLAKES[:, 2]
+    x = (FLAKES[:, 0] - t * (0.06 + 0.3 * speed) * depth) % 1
+    y = (FLAKES[:, 1] + t * 0.07 * depth) % 1
+    x += 0.01 * np.sin(t * 2 + FLAKES[:, 3] * TAU)
+    return x * W, y * H, FLAKES[:, 2]
+
+# the paint is never quite still: letters drift slowly and a soft
+# highlight glides along the body every few seconds
+def paint(l, c, r, t):
+    sweep = ((t * 0.22) % 1.4 - 0.2) * W
+    return np.minimum(1, l + 0.22 * np.exp(-((c - sweep + 0.6 * r) / 5) ** 2))
+
+# built from the ground up: tires trace their circles, a weld line
+# climbs the body, the cabin blinks in, then glass, then the lights
+def built(kind, p, t):
+    if kind == "wheel":
+        return (p.angle + np.pi / 2) % TAU / TAU < smooth(0.3, 1.5, t)
+    if kind == "cabin":
+        return t > 2.7 + p.seed
+    if kind == "glass":
+        return p.seed < smooth(3.7, 4.2, t)
+    return (p.y - 0.12) / 1.08 < 1.12 * smooth(1.3, 3.8, t)
+
+def weld(p, t):
+    k = (p.y - 0.12) / 1.08
+    return abs(k - 1.12 * smooth(1.3, 3.8, t)) < 0.05
+
+def edge_char(vx, vy):
+    a = np.degrees(np.arctan2(abs(vy), abs(vx)))
+    if a < 22.5:
+        return "|"
+    if a > 67.5:
+        return "_" if vy > 0 else "-"
+    return "/" if vx * vy > 0 else "\\"
+
+def frame(t):
+    speed = smooth(*REV, t)
+    bob = 0.0                 # planted on the road, no bounce
+    cv = Canvas(W, H)
+    drawn = smooth(*DRAW, t)
+    cv.sky(moon=crescent, at=(0.76, 0.14), twinkle=2.3, stars=0.05, glitter=260, reveal=drawn)
+    cv.road(road_line, dashes=speed * 14 * t, horizon=horizon)
+    car = np.concatenate([body(), windshield()]) + [0, bob, 0]
+    cv.splat(view(car), light=moonlight, part="body")
+    for cx in (-1.28, 1.28):
+        for cz in (-0.82, 0.82):
+            cv.splat(view(wheel(cx, cz, speed * t * 7)), part="wheel")
+    cv.reveal(smooth(*DRAW, t))
+    cv.outline(edge_char)
+    cv.sea(sea, drift=speed * 70 * t, reflect=moonpath, shore=2, reveal=drawn)
+    cv.ribbon(trail, y=(0.17, 0.30), alpha=speed)
+    cv.snow(*snow(t, speed))
+    cv.hud(mph=round(TOP * speed))
+    return cv
+
+if __name__ == "__main__":
+    Canvas.run(frame, fps=30)
+</script>
+
+<script>
+(() => {
+const PI = Math.PI, TAU = PI * 2;
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const smooth = (a, b, x) => { x = clamp((x - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
+const hash = (a, b) => { let h = (a * 374761393 + b * 668265263) >>> 0; h = ((h ^ (h >>> 13)) * 1274126177) >>> 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+
+// timeline (seconds)
+const DRAW = [0.3, 3.2], REV = [4.6, 7.2], SNOW = [0.4, 4.0], TYPE_SECONDS = 21, TOP = 112;
+// car build: tires trace their circles, a weld line climbs the body, the cabin blinks in, glass, then lights
+const B_WHEEL = [0.3, 1.5], B_BODY = [1.3, 3.8], B_CABIN = [2.7, 3.7], B_GLASS = [3.7, 4.2], B_LIGHTS = 4.25;
+const Y0 = 0.12, YSPAN = 1.08;
+const INK = ".,:;-~=+rtcvxzjf{}<>ou[]neaQ0$8B&#%";
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const YAW = -0.32, PITCH = 0.26;
+const TILT = -0.105; // tips the ground plane so the road climbs gently to the right
+const cyw = Math.cos(YAW), syw = Math.sin(YAW), cpt = Math.cos(PITCH), spt = Math.sin(PITCH);
+
+const stage = document.getElementById("stage");
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let W, H, cols, rows, cellW, cellH, fs, scale, cx0, cy0, hRow;
+let GS = new Uint8Array(1), GW = new Uint8Array(1);
+let Z, GID, GL, stars = [], bursts = [], motes = [], flakes = [], city = [], BC = [], BK = [];
+
+function rand(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+
+function resize() {
+  const r = stage.getBoundingClientRect();
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = r.width; H = r.height;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  cv.style.width = W + "px"; cv.style.height = H + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cols = Math.round(clamp(W / 2.75, 120, 380));
+  cellW = W / cols; fs = cellW / 0.6; cellH = fs * 1.16;
+  rows = Math.max(10, Math.floor(H / cellH));
+  scale = Math.min(W * 0.21, H * 0.19);
+  cx0 = W * 0.53; cy0 = H * 0.72;
+  hRow = Math.floor(H * 0.53 / cellH);
+  { const a = proj(-1, 0, 0), b = proj(1, 0, 0); ROAD_SLOPE = (b[1] - a[1]) / (b[0] - a[0]); }
+  Z = new Float32Array(cols * rows); GID = new Int32Array(cols * rows); GL = new Float32Array(cols * rows); GM = new Uint8Array(cols * rows); GS = new Uint8Array(cols * rows); GW = new Uint8Array(cols * rows);
+  const R = rand(11);
+  stars = [];
+  const n = Math.round(cols * hRow * 0.045);
+  for (let i = 0; i < n; i++) stars.push({ c: Math.floor(R() * cols), r: Math.floor(R() * hRow), ph: R() * TAU, sp: 0.5 + R() * 2.5, ch: R() < 0.65 ? "." : (R() < 0.55 ? "*" : "+") });
+  bursts = [];
+  for (let i = 0; i < 26; i++) bursts.push({ c: Math.floor(R() * cols), r: Math.floor(R() * (hRow - 2)) + 1, per: 2.5 + R() * 4, ph: R() * 10, size: 2 + Math.floor(R() * 4) });
+  motes = [];
+  for (let i = 0; i < 260; i++) motes.push({ x: R() * W, y: R() * H * 0.92, vx: -2 - R() * 6, vy: -1 - R() * 3, ph: R() * TAU, sp: 1 + R() * 4, hue: R() });
+  flakes = [];
+  const nf = Math.round(420 * clamp(W * H / (380 * 540), 0.6, 1.8));
+  for (let i = 0; i < nf; i++) flakes.push({ x: R() * W, y: R() * H, d: R(), wob: R() * TAU, order: R() });
+  BC = new Array(cols * rows); BK = new Array(cols * rows);
+  ctx.font = `${fs}px ${getComputedStyle(document.body).fontFamily}`;
+  ctx.textBaseline = "top";
+}
+
+const inCity = (c, r) => c >= 0 && r >= 0 && c < cols && r < rows && BC[r * cols + c] != null;
+
+// ---------- car geometry (built once) ----------
+const MAXP = 90000;
+const PX = new Float32Array(MAXP), PY = new Float32Array(MAXP), PZ = new Float32Array(MAXP);
+const NX = new Float32Array(MAXP), NY = new Float32Array(MAXP), NZ = new Float32Array(MAXP);
+const SH = new Float32Array(MAXP), ID = new Int16Array(MAXP), ANG = new Float32Array(MAXP), RR = new Float32Array(MAXP);
+let NP = 0;
+const GLS = [];
+let GM = new Uint8Array(1);
+function add(x, y, z, nx, ny, nz, sh, id, ang = 0, rr = 0) {
+  if (NP >= MAXP) return;
+  if (id < 14 || id === 40) y += LIFT;
+  const l = Math.hypot(nx, ny, nz) || 1;
+  PX[NP] = x; PY[NP] = y; PZ[NP] = z; NX[NP] = nx / l; NY[NP] = ny / l; NZ[NP] = nz / l;
+  SH[NP] = sh; ID[NP] = id; ANG[NP] = ang; RR[NP] = rr; NP++;
+}
+const WX = [-1.28, 1.28], WY = 0.36, WR = 0.36, ARCH = 0.43, ST = 0.02, LIFT = 0;
+// rounded body: a superellipse cross-section swept from nose to tail
+function prof(x) {
+  let top;
+  if (x > 0.95) top = 0.84 - 0.34 * (Math.min(1.17, x - 0.95) / 1.17) ** 2;
+  else if (x < -0.8) top = 0.86 + 0.04 * Math.exp(-(((x + 1.3) / 0.4) ** 2)) - 0.2 * (clamp(-x - 1.5, 0, 0.62) / 0.62) ** 2;
+  else top = 0.8;
+  const bot = 0.24 + 0.1 * (clamp(Math.abs(x) - 1.7, 0, 0.42) / 0.42) ** 2;
+  const w = 0.88 * Math.sqrt(clamp(1 - (x / 2.15) ** 6, 0, 1)) + 0.04 * Math.exp(-(((x + 1.3) / 0.5) ** 2));
+  return [top, bot, w];
+}
+const fender = x => Math.exp(-(((x - 1.28) / 0.35) ** 2)) + Math.exp(-(((x + 1.3) / 0.35) ** 2));
+const SE = 3, sp = v => Math.sign(v) * Math.abs(v) ** (2 / SE);
+
+function buildCar() {
+  NP = 0;
+  const xs = [];
+  for (let x = -2.12; x <= 2.1201; x += ST) xs.push(x);
+  const NXs = xs.length, NTh = 176;
+  const G = new Float32Array(NXs * NTh * 3), META = new Float32Array(NXs * NTh * 4);
+  for (let i = 0; i < NXs; i++) {
+    const x = xs[i], [top, bot, w] = prof(x), yc = (top + bot) / 2, hh = (top - bot) / 2, f = fender(x);
+    for (let j = 0; j < NTh; j++) {
+      const th = j / NTh * TAU, c = Math.cos(th), s = Math.sin(th);
+      const o = (i * NTh + j);
+      G[o * 3] = x; G[o * 3 + 1] = yc + hh * sp(s) + 0.06 * f * Math.max(0, s) * Math.abs(c); G[o * 3 + 2] = w * sp(c);
+      META[o * 4] = c; META[o * 4 + 1] = s; META[o * 4 + 2] = w; META[o * 4 + 3] = yc;
+    }
+  }
+  for (let i = 0; i < NXs; i++) for (let j = 0; j < NTh; j++) {
+    const o = i * NTh + j, x = G[o * 3], y = G[o * 3 + 1], z = G[o * 3 + 2];
+    const c = META[o * 4], s = META[o * 4 + 1], w = META[o * 4 + 2], yc = META[o * 4 + 3];
+    if (x > -0.8 && x < 0.95 && s > 0 && Math.abs(z) < w - 0.1) continue;
+    if (Math.abs(c) > 0.35 && WX.some(cx => Math.hypot(x - cx, y - WY) < ARCH)) continue;
+    const a = (Math.max(0, i - 1) * NTh + j) * 3, b = (Math.min(NXs - 1, i + 1) * NTh + j) * 3;
+    const d = (i * NTh + (j + NTh - 1) % NTh) * 3, e = (i * NTh + (j + 1) % NTh) * 3;
+    const ux = G[b] - G[a], uy = G[b + 1] - G[a + 1], uz = G[b + 2] - G[a + 2];
+    const vx = G[e] - G[d], vy = G[e + 1] - G[d + 1], vz = G[e + 2] - G[d + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const az = Math.abs(z);
+    let id = 1;
+    if (x > 1.72 && y > yc && az > 0.36 && az < w * 0.92) id = 10;
+    else if (x > 1.93 && y < yc + 0.02 && az < 0.42) id = 40;
+    else if (x < -1.97 && y > yc - 0.02 && y < yc + 0.09) id = 11;
+    else if (x > -0.95 && x < -0.45 && Math.abs(c) > 0.85 && y > 0.33 && y < 0.6) id = 13;
+    add(x, y, z, nx, ny, nz, 1, id);
+  }
+  // cockpit: floor, door cards, bulkheads
+  for (let x = -0.8; x <= 0.95; x += ST) {
+    const w = prof(x)[2] - 0.1;
+    for (let z = -w; z <= w; z += ST) add(x, 0.5, z, 0, 1, 0, 0.45, 6);
+    for (const sg of [1, -1]) for (let y = 0.5; y <= 0.8; y += ST) {
+      const trim = Math.abs(y - 0.7) < 0.012 && x > -0.6 && x < 0.75;
+      const handle = x > 0.42 && x < 0.6 && Math.abs(y - 0.63) < 0.022;
+      const pocket = x > -0.5 && x < 0.3 && Math.abs(y - 0.56) < 0.012;
+      add(x, y, sg * (w + 0.005), 0, 0, -sg, 0.55, trim || handle ? 19 : pocket ? 16 : 6);
+    }
+  }
+  for (let z = -0.76; z <= 0.76; z += ST) {
+    for (let y = 0.5; y <= 0.86; y += ST) { add(-0.8, y, z, 1, 0, 0, 0.6, 6); if (y <= 0.82) add(0.95, y, z, -1, 0, 0, 0.5, 6); }
+  }
+  // dashboard top, gauge binnacle, centre screen
+  for (let x = 0.68; x <= 0.95; x += ST) for (let z = -0.72; z <= 0.72; z += ST) add(x, 0.8 + (x - 0.68) * 0.12, z, -0.15, 1, 0, 0.5, 16);
+  for (const gz of [0.29, 0.45]) for (let r = 0; r <= 0.065; r += 0.008) for (let a = 0; a < TAU; a += 0.12) {
+    const needle = Math.abs(a - 2.2) < 0.15 && r > 0.015;
+    add(0.74 + r * Math.sin(a) * 0.5, 0.86 + r * Math.sin(a) * 0.6, gz + r * Math.cos(a), -0.6, 1, 0, 1, r > 0.055 || needle ? 18 : 17);
+  }
+  for (let v = 0; v <= 1; v += 0.1) for (let z = -0.13; z <= 0.13; z += 0.012) add(0.86 - v * 0.04, 0.84 + v * 0.07, z, -0.8, 0.5, 0, 0.9, 17);
+  // centre console and gear shifter
+  for (let x = -0.45; x <= 0.7; x += ST) {
+    for (let z = -0.1; z <= 0.1; z += ST) add(x, 0.66, z, 0, 1, 0, 0.7, 16);
+    for (let y = 0.5; y <= 0.66; y += ST) { add(x, y, 0.1, 0, 0, 1, 0.6, 16); add(x, y, -0.1, 0, 0, -1, 0.6, 16); }
+  }
+  for (let k = 0; k <= 1; k += 0.05) for (let a = 0; a < TAU; a += 0.5) add(0.3 - 0.04 * k + 0.018 * Math.cos(a), 0.66 + 0.11 * k, 0.018 * Math.sin(a), Math.cos(a), 0, Math.sin(a), 0.8, 18);
+  for (let a = 0; a < PI; a += 0.15) for (let b = 0; b < TAU; b += 0.3) add(0.26 + 0.04 * Math.sin(a) * Math.cos(b), 0.79 + 0.04 * Math.cos(a), 0.04 * Math.sin(a) * Math.sin(b), Math.sin(a) * Math.cos(b), Math.cos(a), Math.sin(a) * Math.sin(b), 1, 18);
+  // seats: bolsters, stitched centre panels, cushions, rounded headrests
+  for (const [z0, z1] of [[0.12, 0.62], [-0.62, -0.12]]) {
+    const zc = (z0 + z1) / 2;
+    for (let z = z0; z <= z1; z += ST * 0.7) {
+      const edge = Math.min(z - z0, z1 - z), bol = edge < 0.08;
+      for (let y = 0.52; y <= 1.0; y += ST * 0.7) {
+        const stitch = !bol && ((y * 14) % 1) < 0.16;
+        add(-0.5 - (y - 0.52) * 0.25 + (bol ? 0.05 : 0), y, z, 1, 0.25, 0, stitch ? 0.45 : 0.95, bol ? 15 : 7);
+      }
+      for (let x = -0.5; x <= 0.02; x += ST * 0.7) {
+        const stitch = !bol && ((x * 12) % 1 + 1) % 1 < 0.15;
+        add(x, 0.62 + (bol ? 0.04 : 0), z, 0, 1, 0, stitch ? 0.45 : 0.85, bol ? 15 : 7);
+      }
+    }
+    for (let z = zc - 0.13; z <= zc + 0.13; z += ST * 0.6) for (let y = 1.04; y <= 1.17; y += ST * 0.6) {
+      const u = (z - zc) / 0.13, v = (y - 1.105) / 0.065;
+      if (Math.abs(u) ** 3 + Math.abs(v) ** 3 > 1) continue;
+      add(-0.63 - (y - 1.04) * 0.25, y, z, 1, 0.3, 0, 0.95, 15);
+    }
+    for (const pz of [zc - 0.06, zc + 0.06]) for (let y = 1.0; y <= 1.04; y += 0.01) add(-0.62, y, pz, 1, 0, 0, 0.8, 18);
+  }
+  // steering wheel with three spokes
+  {
+    const c = [0.58, 0.92, 0.37], v = [0.45, 0.9];
+    const vl = Math.hypot(...v); v[0] /= vl; v[1] /= vl;
+    const P = (a, r) => [c[0] + v[0] * Math.sin(a) * r, c[1] + v[1] * Math.sin(a) * r, c[2] + Math.cos(a) * r];
+    for (let a = 0; a < TAU; a += 0.04) for (let r = 0.125; r <= 0.16; r += 0.012) add(...P(a, r), -0.9, 0.45, 0, 0.8, 12);
+    for (const a of [PI / 2, PI / 2 + TAU / 3, PI / 2 - TAU / 3]) for (let r = 0; r <= 0.13; r += 0.01) add(...P(a + PI, r), -0.9, 0.45, 0, 0.7, 12);
+  }
+  // rear-view mirror
+  for (let z = -0.09; z <= 0.09; z += 0.01) for (let y = 1.04; y <= 1.09; y += 0.01) add(0.62, y, z, -1, 0, 0, 0.7, 12);
+  // speedster humps behind the seats
+  for (const zc of [0.37, -0.37]) {
+    for (let t = 0; t <= 1; t += 0.02) {
+      const x = -0.82 - 0.8 * t, r = 0.21 * Math.sqrt(Math.max(0, 1 - t * t)) * (0.6 + 0.4 * (1 - t)), base = prof(x)[0];
+      for (let a = 0; a <= PI; a += 0.06) add(x, base + r * Math.sin(a) * 0.85, zc + r * Math.cos(a), 0.3 * t, Math.sin(a), Math.cos(a), 1, 3);
+    }
+  }
+  // curved wraparound windshield: a solid frame; the glass itself tints what is behind it
+  {
+    const wz = prof(0.95)[2] - 0.08;
+    GLS.length = 0;
+    for (let u = -1; u <= 1; u += 0.01) for (let v = 0; v <= 1; v += 0.012) {
+      const x = 0.95 - 0.36 * v - 0.12 * u * u, y = 0.84 + 0.3 * v - 0.05 * u * u, z = wz * u * (1 - 0.12 * v);
+      if (u < -0.82 || u > 0.88 || v > 0.86 || v < 0.05) add(x, y, z, 0.36, 0.3, 0.2 * u, 1, 13);
+      else {
+        const g = u * 2.2 + v * 1.1;
+        GLS.push(x, y, z, Math.abs(g - 0.45) < 0.12 ? 2 : 1);
+      }
+    }
+  }
+  // wheels: tread, sidewall, spoked rim, arch liner
+  for (let k = 0; k < 4; k++) {
+    const cx = WX[k & 1], sg = k < 2 ? 1 : -1, wEdge = prof(cx)[2], cz = sg * (wEdge - 0.1);
+    for (let a = 0; a < TAU; a += 0.035) for (let dz = -0.12; dz <= 0.12; dz += 0.03) {
+      add(cx + WR * Math.cos(a), WY + WR * Math.sin(a), cz + dz, Math.cos(a), Math.sin(a), 0, 0.8, 20 + k, a);
+    }
+    for (let r = 0; r <= WR; r += 0.013) {
+      const n = Math.max(6, Math.round(TAU * r / 0.013));
+      for (let i = 0; i < n; i++) {
+        const a = i / n * TAU;
+        add(cx + r * Math.cos(a), WY + r * Math.sin(a), cz + sg * 0.12, 0, 0, sg, 1, r > 0.25 ? 20 + k : 30 + k, a, r);
+      }
+    }
+    for (let r = WR + 0.01; r <= ARCH + 0.02; r += 0.013) {
+      const n = Math.round(TAU * r / 0.013);
+      for (let i = 0; i < n; i++) {
+        const a = i / n * TAU, y = WY + r * Math.sin(a);
+        if (y < 0.05) continue;
+        add(cx + r * Math.cos(a), y, sg * (wEdge - 0.16), 0, 0, sg, 0.35, 14);
+      }
+    }
+  }
+}
+
+// ---------- colors ----------
+const PAL = {
+  body: [[16, 38, 112], [96, 178, 255]], bodyEdge: [[120, 190, 255], [190, 230, 255]],
+  dark: [[10, 13, 22], [70, 82, 112]], silver: [[150, 168, 200], [250, 252, 255]],
+  seat: [[10, 16, 34], [62, 86, 140]], gauge: [[70, 130, 220], [225, 242, 255]], glass: [[70, 120, 170], [200, 232, 255]],
+  head: [[225, 238, 255], [255, 255, 255]], tail: [[40, 70, 160], [130, 170, 255]],
+  road: [[18, 24, 42], [80, 96, 136]], dash: [[200, 215, 240], [255, 255, 255]], line: [[150, 165, 200], [240, 246, 255]],
+  moon: [[60, 70, 92], [246, 250, 255]],
+};
+const cache = new Map();
+function lit(name, l) {
+  const q = Math.round(clamp(l, 0, 1) * 15), key = name + q;
+  let c = cache.get(key);
+  if (!c) { const [a, b] = PAL[name], t = q / 15; c = `rgb(${lerp(a[0], b[0], t) | 0},${lerp(a[1], b[1], t) | 0},${lerp(a[2], b[2], t) | 0})`; cache.set(key, c); }
+  return c;
+}
+const BG = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#03040a";
+const GLOW = { sea: [70, 128, 225], trail: [96, 206, 255], mtn: [80, 116, 182], star: [215, 228, 255], snow: [248, 251, 255], beam: [225, 240, 255], tree: [96, 130, 190], smoke: [150, 165, 200], spark: [150, 200, 255], warm: [200, 222, 255], ground: [180, 200, 240] };
+function glow(name, a) {
+  const q = Math.round(clamp(a, 0, 1) * 20), key = "g" + name + q;
+  let c = cache.get(key);
+  if (!c) { const [r, g, b] = GLOW[name]; c = `rgba(${r},${g},${b},${(q / 20).toFixed(2)})`; cache.set(key, c); }
+  return c;
+}
+function partName(id) {
+  if (id <= 5 || id === 9) return "body";
+  if (id === 13) return "silver";
+  if (id === 6 || id === 7 || id === 15 || id === 16) return "seat";
+  if (id === 17) return "gauge";
+  if (id === 18 || id === 19) return "silver";
+  if (id === 8) return "glass";
+  if (id === 10) return "head";
+  if (id === 11) return "tail";
+  if (id >= 30 && id < 40) return "silver";
+  if (id === 50) return "road";
+  if (id === 51) return "dash";
+  if (id === 52) return "line";
+  return "dark";
+}
+
+// ---------- particles ----------
+let sparks = [], smoke = [];
+const KEY = (() => { const v = [-0.45, 0.8, 0.55], l = Math.hypot(...v); return v.map(c => c / l); })();
+const NB = [[-1, 0, 1], [1, 0, 1], [0, -1, 1], [0, 1, 1], [-1, -1, 0.7], [1, -1, 0.7], [-1, 1, 0.7], [1, 1, 0.7]];
+const proj = (x, y, z) => {
+  const X = x * cyw + z * syw, z1 = -x * syw + z * cyw, Y = y * cpt - z1 * spt;
+  return [cx0 + X * scale, cy0 - (Y - 0.6) * scale + TILT * X * scale];
+};
+const put = (c, r, ch, color) => { ctx.fillStyle = color; ctx.fillText(ch, c * cellW, r * cellH); };
+const horizonPy = px => H * 0.53 + ROAD_SLOPE * (px - W / 2);
+const hRowAt = c => Math.floor(horizonPy((c + 0.5) * cellW) / cellH);
+let ROAD_SLOPE = 0;
+const empty = (c, r) => c >= 0 && r >= 0 && c < cols && r < rows && GID[r * cols + c] < 0;
+
+let letters = 0;
+const CRATERS = [[-0.78, -0.22, 0.1], [-0.66, 0.36, 0.09], [-0.9, 0.08, 0.06], [-0.42, -0.72, 0.07], [-0.4, 0.78, 0.06]];
+const GLINTS = Array.from({ length: 3 }, (_, i) => ({ a: PI * (0.7 + 0.6 * i / 2), d: 1.18 + 0.28 * ((i * 7) % 5) / 4, per: 1.6 + (i % 4) * 0.7, ph: i * 1.37, size: 1 + (i % 3) }));
+const ICX = 0.5, ICY = 0, IR = 0.92;
+const moonGeo = () => ({ mx: W * 0.74, my: H * 0.19, Rm: Math.min(W * 0.15, H * 0.11) });
+const inMoon = (c, r) => { const { mx, my, Rm } = moonGeo(); return Math.hypot(((c + 0.5) * cellW - mx) / Rm, ((r + 0.5) * cellH - my) / Rm) < 1.05; };
+const ML = (() => { const v = [-0.55, 0.25, 0.8], l = Math.hypot(...v); return v.map(c => c / l); })();
+
+function frame(t, dt) {
+  const reveal = reduce ? 1 : smooth(DRAW[0], DRAW[1], t);
+  const speed = reduce ? 0.6 : smooth(REV[0], REV[1], t);
+  const snowAmt = reduce ? 1 : smooth(SNOW[0], SNOW[1], t);
+  const bob = 0;
+  const spin = reduce ? 0 : wheelAngle;
+  const roadShift = reduce ? 0 : roadPos;
+  const sweepCol = lerp(-2, cols + 2, reveal);
+
+  Z.fill(-1e9); GID.fill(-1); GS.fill(0); GW.fill(0);
+  const wheelP = reduce ? 1 : smooth(B_WHEEL[0], B_WHEEL[1], t);
+  const bodyP = reduce ? 2 : smooth(B_BODY[0], B_BODY[1], t) * 1.12;
+  const lightsOn = reduce || (t > B_LIGHTS && (t > B_LIGHTS + 0.45 || Math.sin((t - B_LIGHTS) * 60) > 0));
+  const building = !reduce && bodyP < 1.12;
+  // car
+  for (let i = 0; i < NP; i++) {
+    const id = ID[i];
+    const body = id < 20 || id === 40;
+    // build gating
+    let scan = false, ghost = false;
+    if (id >= 20 && id < 40) { if ((((ANG[i] + PI / 2) % TAU) + TAU) % TAU / TAU > wheelP) continue; }
+    else if (id === 14) { if (wheelP < 1) continue; }
+    else if (id === 6 || id === 7 || id === 12 || (id >= 15 && id <= 19)) { if (!reduce && t < B_CABIN[0] + hash(i, 5) * (B_CABIN[1] - B_CABIN[0])) continue; }
+    else {
+      const k = (PY[i] - Y0) / YSPAN;
+      if (k > bodyP) { ghost = building && k < bodyP + 0.3 && (i % 3 === 0); if (!ghost) continue; }
+      else if (building && k > bodyP - 0.05) scan = true;
+    }
+    const y = PY[i] + (body ? bob : 0);
+    const X = PX[i] * cyw + PZ[i] * syw, z1 = -PX[i] * syw + PZ[i] * cyw;
+    const Y = y * cpt - z1 * spt, Zd = y * spt + z1 * cpt;
+    const c = Math.floor((cx0 + X * scale) / cellW), r = Math.floor((cy0 - (Y - 0.6) * scale + TILT * X * scale) / cellH);
+    if (c < 0 || r < 0 || c >= cols || r >= rows) continue;
+    const o = r * cols + c;
+    if (ghost) { GW[o] = 1; continue; }
+    if (Zd <= Z[o]) continue;
+    let gid = id;
+    let l = (0.2 + 0.8 * Math.abs(NX[i] * KEY[0] + NY[i] * KEY[1] + NZ[i] * KEY[2])) * SH[i];
+    if (id >= 30 && id < 40) {
+      const s = Math.cos(5 * (ANG[i] + spin));
+      if (RR[i] < 0.05) l = 1;
+      else if (RR[i] > 0.22) l = 0.9;
+      else l = s > 0.45 ? 0.8 + 0.2 * l : 0.12;
+    } else if (id >= 20 && id < 30) {
+      l *= Math.cos(14 * (ANG[i] + spin)) > 0 ? 0.75 : 0.45;
+    } else if (id === 10) l = lightsOn ? 1 : 0.3;
+    else if (id === 11) l = lightsOn ? Math.max(l, 0.9) : 0.3;
+    else if (id === 13) l = Math.max(l, 0.92);
+    Z[o] = Zd; GID[o] = gid; GL[o] = l; GS[o] = scan ? 1 : 0;
+  }
+
+  GM.fill(0);
+  const glassP = reduce ? 1 : smooth(B_GLASS[0], B_GLASS[1], t);
+  if (glassP > 0) for (let i = 0; i < GLS.length; i += 4) {
+    if (hash(i, 9) > glassP) continue;
+    const x = GLS[i], y = GLS[i + 1], z = GLS[i + 2];
+    const X = x * cyw + z * syw, z1 = -x * syw + z * cyw, Y = y * cpt - z1 * spt, Zd = y * spt + z1 * cpt;
+    const c = Math.floor((cx0 + X * scale) / cellW), r = Math.floor((cy0 - (Y - 0.6) * scale + TILT * X * scale) / cellH);
+    if (c < 0 || r < 0 || c >= cols || r >= rows) continue;
+    const o = r * cols + c;
+    if (GID[o] >= 0 && Z[o] > Zd) continue;
+    if (GLS[i + 3] > GM[o]) GM[o] = GLS[i + 3];
+  }
+  ctx.clearRect(0, 0, W, H);
+
+  // sky: stars and bursts
+  for (const s of stars) {
+    if (!empty(s.c, s.r) || inMoon(s.c, s.r) || s.r >= hRowAt(s.c) || inCity(s.c, s.r)) continue;
+    const k = Math.pow(0.5 + 0.5 * Math.sin(t * s.sp + s.ph), 3);
+    if (k < 0.04) continue;
+    put(s.c, s.r, s.ch, glow("star", 0.15 + k * 0.8));
+  }
+  for (const bu of bursts) {
+    const ph = ((t + bu.ph) % bu.per) / bu.per;
+    if (ph > 0.42) continue;
+    const k = Math.sin(ph / 0.42 * PI);
+    const L = Math.round(k * bu.size);
+    const p = (c, r, ch, a) => { if (r < hRowAt(c) && empty(c, r) && !inMoon(c, r) && !inCity(c, r)) put(c, r, ch, glow("star", a)); };
+    p(bu.c, bu.r, k > 0.6 ? "*" : "+", k);
+    for (let d = 1; d <= L; d++) {
+      const a = k * (1 - d / (L + 1));
+      p(bu.c - 2 * d, bu.r, "-", a); p(bu.c + 2 * d, bu.r, "-", a);
+      p(bu.c - 2 * d + 1, bu.r, "-", a * 0.8); p(bu.c + 2 * d - 1, bu.r, "-", a * 0.8);
+      p(bu.c, bu.r - d, "|", a); p(bu.c, bu.r + d, "|", a);
+      if (d < L) { p(bu.c + d, bu.r - d, "/", a * 0.6); p(bu.c - d, bu.r + d, "/", a * 0.6); p(bu.c - d, bu.r - d, "\\", a * 0.6); p(bu.c + d, bu.r + d, "\\", a * 0.6); }
+    }
+  }
+
+  // crescent moon: the disc minus a slightly shifted disc
+  {
+    const { mx, my, Rm } = moonGeo();
+    const disc = (dx, dy) => dx * dx + dy * dy <= 1;
+    const cres = (dx, dy) => disc(dx, dy) && (dx - ICX) ** 2 + (dy - ICY) ** 2 > IR ** 2;
+    const at = (c, r) => [((c + 0.5) * cellW - mx) / Rm, ((r + 0.5) * cellH - my) / Rm];
+    const c0 = Math.floor((mx - Rm * 1.7) / cellW), c1 = Math.ceil((mx + Rm * 1.7) / cellW);
+    const r0 = Math.floor((my - Rm * 1.7) / cellH), r1 = Math.ceil((my + Rm * 1.7) / cellH);
+    for (let r = Math.max(0, r0); r <= Math.min(rows - 1, r1); r++) for (let c = Math.max(0, c0); c <= Math.min(cols - 1, c1); c++) {
+      if (c > sweepCol) continue;
+      const [dx, dy] = at(c, r), d = Math.hypot(dx, dy);
+      const inner = Math.hypot(dx - ICX, dy - ICY);
+      if (!cres(dx, dy)) {
+        if (d > 1 && d < 1.7 && dx < 0.6 && inner > IR && !inCity(c, r) && hash(c, r + Math.floor(t * 2)) < 0.16) {
+          put(c, r, ".", glow("warm", (1.7 - d) * 0.55 * (0.55 + 0.45 * Math.sin(t * 1.3 + c * 0.4 + r * 0.6))));
+        }
+        continue;
+      }
+      let l = clamp(0.45 + 0.55 * Math.min(1, (inner - IR) / 0.35) * (1 - Math.max(0, d - 0.8) * 1.2), 0.3, 1);
+      l *= 0.86 + 0.14 * Math.sin(t * 2.3 + c * 0.9 + r * 1.3);
+      for (const [cxr, cyr, rr] of CRATERS) { const dd = Math.hypot(dx - cxr, dy - cyr); if (dd < rr) l *= 0.7; }
+      let vx = 0, vy = 0, out = 0;
+      for (const [ox, oy, w] of NB) { const [ex, ey] = at(c + ox, r + oy); if (!cres(ex, ey)) { vx += ox * cellW * w; vy += oy * cellH * w; out++; } }
+      let ch;
+      if (out) {
+        const a = Math.atan2(Math.abs(vy), Math.abs(vx)) * 180 / PI;
+        if (a > 55) {
+          // near-horizontal: put the stroke at the exact height of the curve in this column
+          const cands = [], ox = 1 - dx * dx, ix = IR * IR - (dx - ICX) ** 2;
+          if (ox > 0) cands.push(Math.sqrt(ox), -Math.sqrt(ox));
+          if (ix > 0) cands.push(ICY + Math.sqrt(ix), ICY - Math.sqrt(ix));
+          let best = dy, bd = 1e9;
+          for (const cy of cands) { const dd = Math.abs(cy - dy); if (dd < bd) { bd = dd; best = cy; } }
+          const f = clamp((my + best * Rm) / cellH - r, 0, 0.999);
+          ch = f < 0.34 ? "\u203E" : f < 0.67 ? "-" : "_";
+        } else if (a < 30) ch = "(";
+        else ch = vx * vy > 0 ? "/" : "\\";
+        l = Math.max(l, 0.75);
+      }
+      else ch = INK[clamp(Math.floor(l * (INK.length - 1)) + Math.floor(hash(c, r + Math.floor(t * 2.5)) * 3) - 1, 0, INK.length - 1)];
+      put(c, r, ch, lit("moon", l));
+      if (!reduce && reveal < 1 && Math.abs(c - sweepCol) < 1 && Math.random() < 0.35) sparks.push({ x: (c + 0.5) * cellW, y: (r + 0.5) * cellH, vx: (Math.random() - 0.3) * 50, vy: (Math.random() - 0.6) * 50, life: 1, max: 0.4 + Math.random() * 0.5 });
+    }
+    // twinkling glints around the lit edge
+    for (const g of GLINTS) {
+      const ph = ((t + g.ph) % g.per) / g.per;
+      if (ph > 0.5) continue;
+      const k = Math.sin(ph / 0.5 * PI);
+      const gc = Math.floor((mx + Math.cos(g.a) * g.d * Rm) / cellW), gr = Math.floor((my - Math.sin(g.a) * g.d * Rm) / cellH);
+      const q = (c, r, ch, a) => { if (c <= sweepCol && empty(c, r) && !inCity(c, r)) put(c, r, ch, glow("star", a)); };
+      q(gc, gr, k > 0.6 ? "*" : "+", 0.3 + 0.7 * k);
+      const L = Math.round(k * g.size);
+      for (let dd = 1; dd <= L; dd++) { const a = k * (1 - dd / (L + 1)); q(gc - 2 * dd, gr, "-", a); q(gc + 2 * dd, gr, "-", a); q(gc - 2 * dd + 1, gr, "-", a * 0.8); q(gc + 2 * dd - 1, gr, "-", a * 0.8); q(gc, gr - dd, "|", a); q(gc, gr + dd, "|", a); }
+    }
+  }
+
+  // snowy ground under a horizon tilted to run parallel with the road
+  const LINE = ["‾", "-", "_"];
+  const lineCh = py => { const f = py / cellH - Math.floor(py / cellH); return LINE[Math.min(2, Math.floor(f * 3))]; };
+  for (let c = 0; c < cols; c++) {
+    const hpy = horizonPy((c + 0.5) * cellW), hr = Math.floor(hpy / cellH);
+    if (empty(c, hr) && !inCity(c, hr)) put(c, hr, lineCh(hpy), glow("ground", 0.4));
+    // where the far road edge sits in this column: the sea runs from the horizon to a thin shore above it
+    const X = ((c + 0.5) * cellW - cx0) / scale, rx = (X + 1.74 * syw) / cyw;
+    const shore = Math.floor(proj(rx, 0, -1.74)[1] / cellH) - 2;
+    const mc = moonGeo().mx / cellW;
+    for (let r = hr + 1; r < rows; r++) {
+      if (!empty(c, r) || inCity(c, r)) continue;
+      const h = hash(c, r);
+      if (r < shore) {
+        if (c > sweepCol) continue;
+        const d = (r - hr) / Math.max(1, shore - hr);
+        // moonlight path breaking up on the water
+        const half = 1.5 + 9 * d, dc = Math.abs(c + 0.5 - mc);
+        const wob = half * (0.65 + 0.35 * Math.sin(t * 2.6 + r * 1.9));
+        if (dc < wob && hash(c, r + Math.floor(t * 7)) < 0.75 * (1 - dc / wob) + 0.15) {
+          const k = 1 - dc / wob;
+          put(c, r, k > 0.6 ? "=" : k > 0.3 ? "-" : "~", glow("warm", 0.35 + 0.55 * k * (0.7 + 0.3 * Math.sin(t * 5 + c))));
+          continue;
+        }
+        // swell: tight lines near the horizon, broader rolling rows toward the shore
+        const cc = c + seaPos * (0.25 + 0.75 * d) / cellW;
+        const w = Math.sin(cc * 0.33 * (1.6 - d) + t * (0.6 + d) + r * 1.7) + 0.5 * Math.sin(cc * 0.9 - t * 1.8 + r * 3.1);
+        if (w > 1.0) put(c, r, "~", glow("sea", 0.35 + 0.3 * d));
+        else if (w > 0.45) put(c, r, "-", glow("sea", 0.2 + 0.25 * d));
+        else if (w > 0 && h < 0.35) put(c, r, ".", glow("sea", 0.14 + 0.12 * d));
+        continue;
+      }
+      if (r < shore + 2) { if (h < 0.55) put(c, r, h < 0.25 ? "." : h < 0.4 ? "," : "_", glow("ground", 0.45)); continue; }
+      const depth = (r - hr) / Math.max(1, rows - hr);
+      if (h < 0.1 + 0.12 * depth) put(c, r, h < 0.05 ? "." : h < 0.08 ? "," : "~", glow("ground", 0.12 + 0.28 * depth));
+    }
+  }
+  // the road: surface plus edges and centre dashes drawn as exact lines
+  const roadPy = (px, z) => { const X = (px - cx0) / scale, x = (X - z * syw) / cyw; return [proj(x, 0, z)[1], x]; };
+  for (let c = 0; c < cols; c++) {
+    const px = (c + 0.5) * cellW;
+    if (px > sweepCol * cellW) continue;
+    const [farPy] = roadPy(px, -1.74), [nearPy] = roadPy(px, 1.74), [midPy, midX] = roadPy(px, 0);
+    const rf = Math.floor(farPy / cellH), rn = Math.floor(nearPy / cellH), rm = Math.floor(midPy / cellH);
+    for (let r = rf + 1; r < rn; r++) {
+      if (r === rm || !empty(c, r)) continue;
+      const py = (r + 0.5) * cellH, A = (px - cx0) / scale, Y = 0.6 - (py - TILT * (px - cx0) - cy0) / scale, z1 = -Y / spt;
+      const gx = A * cyw - z1 * syw, gz = A * syw + z1 * cyw;
+      let l = 0.22 + 0.2 * hash(c, r * 3 + 1);
+      if (gx > 1.9) { const cone = 0.55 + (gx - 2) * 0.17; if (Math.abs(gz) < cone) l += 0.7 * (1 - clamp((gx - 2) / 6, 0, 1)) * (1 - Math.abs(gz) / cone * 0.6); }
+      put(c, r, INK[clamp(Math.floor(l * 9), 0, 9)], lit("road", l));
+    }
+    if (empty(c, rf)) put(c, rf, lineCh(farPy), lit("line", 0.7));
+    if (empty(c, rn)) put(c, rn, lineCh(nearPy), lit("line", 0.9));
+    const dash = ((((midX + roadShift) % 1.6) + 1.6) % 1.6) < 0.8;
+    if (dash && empty(c, rm)) put(c, rm, lineCh(midPy), lit("dash", 0.8));
+  }
+
+  // background glitter motes
+  for (const m of motes) {
+    if (!reduce) { m.x += m.vx * dt * (1 + speed); m.y += m.vy * dt; if (m.x < -10) m.x += W + 20; if (m.y < -10) m.y += H * 0.92; }
+    const c = Math.floor(m.x / cellW), r = Math.floor(m.y / cellH);
+    if (!empty(c, r) || inMoon(c, r) || inCity(c, r)) continue;
+    const k = Math.pow(0.5 + 0.5 * Math.sin(t * m.sp + m.ph), 6);
+    if (k < 0.08) continue;
+    put(c, r, k > 0.75 ? "*" : k > 0.35 ? "+" : "·", glow(m.hue < 0.5 ? "spark" : "star", 0.15 + 0.75 * k));
+  }
+
+  // headlight beam
+  const h1 = proj(2.0, 0.6 + bob, 0.5), h2 = proj(2.0, 0.6 + bob, -0.5);
+  const f1 = proj(7.6, 0.05, 1.5), f2 = proj(7.6, 0.05, -1.5);
+  const beamOn = lightsOn;
+  const quad = [h1, f1, f2, h2];
+  const inBeam = (px, py) => {
+    let sgn = 0;
+    for (let i = 0; i < 4; i++) {
+      const [ax, ay] = quad[i], [bx, by] = quad[(i + 1) % 4];
+      const cr = (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+      if (cr === 0) continue;
+      if (sgn === 0) sgn = Math.sign(cr); else if (Math.sign(cr) !== sgn) return 0;
+    }
+    const d = Math.hypot(px - (h1[0] + h2[0]) / 2, py - (h1[1] + h2[1]) / 2) / Math.hypot(f1[0] - h1[0], f1[1] - h1[1]);
+    return clamp(1 - d, 0, 1);
+  };
+  if (beamOn) {
+    const bc0 = Math.floor(Math.min(...quad.map(q => q[0])) / cellW), bc1 = Math.ceil(Math.max(...quad.map(q => q[0])) / cellW);
+    const br0 = Math.floor(Math.min(...quad.map(q => q[1])) / cellH), br1 = Math.ceil(Math.max(...quad.map(q => q[1])) / cellH);
+    for (let r = Math.max(0, br0); r <= Math.min(rows - 1, br1); r++) for (let c = Math.max(0, bc0); c <= Math.min(cols - 1, bc1); c++) {
+      if (!empty(c, r)) continue;
+      const k = inBeam((c + 0.5) * cellW, (r + 0.5) * cellH);
+      if (k > 0 && hash(c + Math.floor(t * 6), r) < 0.16) put(c, r, ".", glow("beam", 0.35 * k));
+    }
+  }
+
+  // far snow (behind the car)
+  const flakeBase = -(18 + 225 * speed), shown = Math.floor(flakes.length * snowAmt);
+  for (let i = 0; i < flakes.length; i++) {
+    const f = flakes[i];
+    const depth = 0.5 + f.d;
+    if (!reduce) {
+      f.x += (flakeBase * depth + 6 * Math.sin(t * 1.7 + f.wob)) * dt;
+      f.y += (22 + 38 * f.d) * depth * dt;
+      if (f.x < -8) { f.x += W + 16; }
+      if (f.y > H + 4) { f.y -= H + 8; f.x = Math.random() * (W + 40); }
+    }
+    f.c = Math.floor(f.x / cellW); f.r = Math.floor(f.y / cellH);
+    if (i >= shown || f.d > 0.72 || hash(i, 3) < 0.45) continue;
+    if (!empty(f.c, f.r)) continue;
+    const b = beamOn ? inBeam(f.x, f.y) : 0;
+    put(f.c, f.r, f.d < 0.3 ? "." : f.d < 0.55 ? "+" : "*", b > 0 ? glow("beam", 0.5 + 0.5 * b) : glow("snow", 0.22 + 0.6 * f.d));
+  }
+
+  // the car and road in letters
+  letters = 0;
+  const eps = 0.05;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const o = r * cols + c, id = GID[o];
+    if (id < 0) continue;
+    const l = GL[o];
+    const name = partName(id);
+    if (id >= 50) continue;
+    letters++;
+    let vx = 0, vy = 0, nOut = 0;
+    const fillOnly = id === 6 || id === 14;
+    if (!fillOnly) for (const [dx, dy, w] of NB) {
+      const cc = c + dx, rr = r + dy;
+      let out;
+      if (cc < 0 || rr < 0 || cc >= cols || rr >= rows) out = true;
+      else {
+        const n = rr * cols + cc, nid = GID[n];
+        out = nid < 0 || nid >= 50 || (nid !== id ? (Z[n] < Z[o] - eps || (Math.abs(Z[n] - Z[o]) <= eps && nid < id)) : Z[n] < Z[o] - 0.3);
+      }
+      if (out) { vx += dx * cellW * w; vy += dy * cellH * w; nOut++; }
+    }
+    let ch, color;
+    if (nOut > 0) {
+      if (Math.abs(vx) < 1e-6 && Math.abs(vy) < 1e-6) ch = "|";
+      else { const a = Math.atan2(Math.abs(vy), Math.abs(vx)) * 180 / PI; ch = a < 22.5 ? "|" : a > 67.5 ? (vy > 0 ? "_" : "-") : (vx * vy > 0 ? "/" : "\\"); }
+      color = name === "body" ? lit("bodyEdge", l) : lit(name, 0.55 + 0.45 * l);
+    } else {
+      let ll = l;
+      let seed = hash(c, r + id * 31);
+      if (name === "body" && !reduce) {
+        seed = hash(c, r + id * 31 + Math.floor(t * 0.9 + c * 0.06 + r * 0.1 + seed * 3));
+        const sweep = ((t * 0.22) % 1.4 - 0.2) * cols;
+        ll = Math.min(1, l + 0.22 * Math.exp(-(((c - sweep + r * 0.6) / 5) ** 2)));
+      }
+      ch = INK[clamp(Math.floor(ll * (INK.length - 1)) + Math.floor(seed * 3) - 1, 0, INK.length - 1)];
+      color = lit(name, ll);
+    }
+    const behindGlass = id === 6 || id === 7 || id === 12 || (id >= 15 && id <= 18);
+    if (behindGlass && GM[o]) { ch = GM[o] === 2 ? ":" : "."; color = lit("glass", GM[o] === 2 ? 0.55 : 0.32); }
+    if (GS[o]) { ch = hash(c, r + Math.floor(t * 20)) < 0.5 ? "=" : "#"; color = glow("trail", 0.75 + 0.25 * Math.sin(t * 30 + c)); }
+    put(c, r, ch, color);
+    if (GS[o] && Math.random() < 0.06) {
+      sparks.push({ x: (c + 0.5) * cellW, y: (r + 0.5) * cellH, vx: (Math.random() - 0.5) * 70, vy: -Math.random() * 60, life: 1, max: 0.35 + Math.random() * 0.5 });
+    }
+    if (id >= 20 && id < 34 && wheelP < 1 && Math.random() < 0.02) {
+      sparks.push({ x: (c + 0.5) * cellW, y: (r + 0.5) * cellH, vx: (Math.random() - 0.5) * 40, vy: -Math.random() * 40, life: 1, max: 0.3 + Math.random() * 0.4 });
+    }
+  }
+
+  // faint wireframe dots showing the body still to come
+  if (building) for (let o = 0; o < GW.length; o++) {
+    if (!GW[o] || GID[o] >= 0) continue;
+    put(o % cols, (o / cols) | 0, ".", glow("trail", 0.22));
+  }
+
+  // a faint light ribbon off the tail, like a light cycle's wall
+  if (speed > 0.01 && reveal >= 1) {
+    for (let c = 0; c < cols; c++) {
+      const px = (c + 0.5) * cellW, x = ((px - cx0) / scale) / cyw;
+      if (x > -2.14 || x < -16) continue;
+      const fade = Math.exp(-(-2.14 - x) / 4.5) * speed;
+      const shimmer = 0.8 + 0.2 * Math.sin((x + roadPos) * 6 + t * 3);
+      const top = proj(x, 0.3, 0)[1], bot = proj(x, 0.17, 0)[1];
+      const rt = Math.floor(top / cellH), rb = Math.floor(bot / cellH);
+      const f = top / cellH - rt;
+      if (empty(c, rt)) {
+        ctx.fillStyle = BG; ctx.fillRect(c * cellW, rt * cellH, cellW + 0.5, cellH + 0.5);
+        put(c, rt, f < 0.34 ? "‾" : f < 0.67 ? "-" : "_", glow("trail", 0.8 * fade * shimmer));
+      }
+      for (let r = rt + 1; r <= rb; r++) if (empty(c, r) && hash(c, r + Math.floor(roadPos * 4)) < 0.5) put(c, r, ".", glow("trail", 0.28 * fade * shimmer));
+    }
+  }
+
+  // glass over open sky: just the glare streaks and a faint sheen
+  for (let o = 0; o < GM.length; o++) {
+    if (!GM[o] || GID[o] >= 0) continue;
+    const c = o % cols, r = (o / cols) | 0;
+    put(c, r, GM[o] === 2 ? ":" : ".", lit("glass", GM[o] === 2 ? 0.5 : 0.28));
+  }
+
+  // exhaust puffs off the tail
+  if (!reduce && speed > 0.05 && Math.random() < 0.35) smoke.push({ x: -2.14, y: 0.32, z: 0.5, life: 1, max: 1 + Math.random() * 0.8, j: Math.random() });
+  for (const s of smoke) {
+    s.x -= (0.6 + 2.2 * speed) * dt; s.y += 0.25 * dt; s.z += (s.j - 0.5) * 0.3 * dt; s.life -= dt / s.max;
+    const [px, py] = proj(s.x, s.y, s.z);
+    const c = Math.floor(px / cellW), r = Math.floor(py / cellH);
+    if (empty(c, r)) put(c, r, s.life > 0.6 ? "o" : s.life > 0.3 ? "~" : ".", glow("smoke", 0.5 * s.life));
+  }
+  smoke = smoke.filter(s => s.life > 0);
+
+  // drawing sparks
+  for (const p of sparks) {
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 40 * dt; p.life -= dt / p.max;
+    const c = Math.floor(p.x / cellW), r = Math.floor(p.y / cellH);
+    if (c >= 0 && r >= 0 && c < cols && r < rows) put(c, r, p.life > 0.6 ? "*" : p.life > 0.3 ? "+" : ".", glow("spark", p.life));
+  }
+  sparks = sparks.filter(p => p.life > 0);
+  if (sparks.length > 400) sparks.splice(0, sparks.length - 400);
+
+  // near snow (in front of the car)
+  for (let i = 0; i < shown; i++) {
+    const f = flakes[i];
+    if (f.d <= 0.72 || f.c < 0 || f.r < 0 || f.c >= cols || f.r >= rows) continue;
+    const b = beamOn ? inBeam(f.x, f.y) : 0;
+    put(f.c, f.r, "*", b > 0 ? glow("beam", 0.6 + 0.4 * b) : glow("snow", 0.55 + 0.45 * (f.d - 0.72) / 0.28));
+  }
+
+  return { speed, snowAmt };
+}
+
+// ---------- code panel ----------
+const SRC = document.getElementById("src").textContent.replace(/^\n/, "").replace(/\s+$/, "");
+const LINES = SRC.split("\n");
+const TOTAL = SRC.length;
+const KW = new Set(["def", "return", "import", "from", "for", "in", "if", "else", "as", "not", "and", "or", "None", "True", "False", "lambda", "while"]);
+const BI = new Set(["np", "int", "abs", "max", "min", "len", "range", "round", "Canvas"]);
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function hl(line) {
+  let out = "", prevDef = false, m;
+  const re = /(#.*$)|("[^"]*"?|'[^']*'?)|(\b\d+(?:\.\d+)?(?:e-?\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)|(\s+)|(.)/g;
+  while ((m = re.exec(line))) {
+    if (m[1]) out += `<span class="c">${esc(m[1])}</span>`;
+    else if (m[2]) out += `<span class="s">${esc(m[2])}</span>`;
+    else if (m[3]) out += `<span class="n">${m[3]}</span>`;
+    else if (m[4]) {
+      const w = m[4];
+      if (KW.has(w)) out += `<span class="k">${w}</span>`;
+      else if (prevDef || BI.has(w)) out += `<span class="f">${w}</span>`;
+      else out += w;
+      prevDef = w === "def";
+      continue;
+    }
+    else out += esc(m[0]);
+    if (!m[5]) prevDef = false;
+  }
+  return out;
+}
+const HL = LINES.map(hl);
+const codeEl = document.getElementById("code"), listEl = document.getElementById("lines");
+let lastTyped = -1;
+function renderCode(t) {
+  const typed = reduce ? TOTAL : Math.min(TOTAL, Math.floor(TOTAL * clamp(t / TYPE_SECONDS, 0, 1)));
+  if (typed === lastTyped) return;
+  lastTyped = typed;
+  let left = typed, cur = 0;
+  while (cur < LINES.length - 1 && left > LINES[cur].length) { left -= LINES[cur].length + 1; cur++; }
+  const out = [];
+  for (let i = 0; i <= cur; i++) {
+    const body = i < cur ? HL[i] : hl(LINES[i].slice(0, left)) + '<span class="cursor"></span>';
+    out.push(`<li${i === cur ? ' class="cur"' : ""}><span class="ln">${i + 1}</span><span class="tx">${body}</span></li>`);
+  }
+  listEl.innerHTML = out.join("");
+  codeEl.classList.toggle("done", typed >= TOTAL);
+  const li = listEl.lastElementChild;
+  if (li) codeEl.scrollTop = Math.max(0, li.offsetTop - codeEl.clientHeight * 0.55);
+}
+
+// ---------- loop ----------
+const clockEl = document.getElementById("clock"), speedEl = document.getElementById("hSpeed"), snowEl = document.getElementById("hSnow"), letEl = document.getElementById("hLetters"), fpsEl = document.getElementById("fps");
+let t0 = performance.now(), last = t0, fps = 30, n = 0, wheelAngle = 0, roadPos = 0, skyNear = 0, skyFar = 0, seaPos = 0;
+const START = reduce ? 30 : 0;
+const pad = (v, w, d) => Math.abs(v).toFixed(d).padStart(w, "0");
+function tick(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  if (dt > 0) fps = lerp(fps, 1 / dt, 0.05);
+  const t = START + (now - t0) / 1000;
+  const sp = smooth(REV[0], REV[1], t);
+  wheelAngle += sp * 7 * dt;
+  roadPos += sp * 14 * dt;
+  if (!reduce) seaPos += sp * 70 * dt;
+  if (!reduce) { skyNear += sp * 14 * dt; skyFar += sp * 14 * dt; }
+  const st = frame(t, dt);
+  renderCode(t);
+  if ((n++ % 4) === 0) {
+    clockEl.textContent = `t ${pad(t, 5, 2)}s`;
+    const mph = Math.round(TOP * st.speed + (st.speed > 0.9 ? 1.0 * Math.sin(t * 1.3) : 0));
+    speedEl.textContent = `speed ${pad(mph, 3, 0)} mph`;
+    snowEl.textContent = `snow ${(1.8 * st.snowAmt + 0.15 * Math.sin(t * 0.4) * st.snowAmt).toFixed(1)} in/h`;
+    letEl.textContent = `letters ${letters.toLocaleString("en-US")}`;
+    fpsEl.textContent = `running · ${Math.round(clamp(fps, 1, 240))} fps`;
+  }
+  requestAnimationFrame(tick);
+}
+function replay() { t0 = performance.now(); sparks = []; smoke = []; lastTyped = -1; wheelAngle = 0; roadPos = 0; skyNear = 0; skyFar = 0; seaPos = 0; }
+document.getElementById("replay").addEventListener("click", replay);
+stage.addEventListener("click", e => { if (e.target.tagName !== "INPUT") replay(); });
+window.__seek = s => { t0 = performance.now() - s * 1000; };
+
+buildCar();
+const ro = new ResizeObserver(() => { resize(); lastTyped = -1; });
+const begin = () => { resize(); ro.observe(stage); requestAnimationFrame(tick); };
+if (document.fonts && document.fonts.load) document.fonts.load('16px "JetBrains Mono"').then(begin, begin); else begin();
+})();
+</script>
+</body>
+</html>
